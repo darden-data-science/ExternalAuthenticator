@@ -1,4 +1,4 @@
-from jupyterhub.handlers import BaseHandler, LoginHandler
+from jupyterhub.handlers import BaseHandler
 from jupyterhub.auth import Authenticator
 from jupyterhub.utils import url_path_join
 
@@ -13,7 +13,7 @@ from tornado import web
 
 auth_token_name = 'auth-token'
 
-class ExternalLoginHandler(LoginHandler):
+class ExternalLoginHandler(BaseHandler):
     async def get(self):
         if auth_token_name not in self.request.arguments:
             self.redirect_to_login_server()
