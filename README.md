@@ -1,3 +1,3 @@
-# SAMLauthenticator
+# ExternalAuthenticator
 
-This is a SAML based authenticator for JuptyerHub. This is the initial version.
+This is an authenticator that uses a separate server with the same tornado `cookie_secret` to log in a user. The external server returns a query value in the url signed using the shared cookie secret that includes the username (if the user passes authentication) and a unique value unique to the instance using the authenticator to prevent using the same auth token to access other services. This was developed in order to have a single sign on point for a number of different Jupyterhub instances in order to avoid things like having to set up sign on credentials for all different instances.
