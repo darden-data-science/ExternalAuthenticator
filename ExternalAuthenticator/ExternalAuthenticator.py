@@ -32,7 +32,7 @@ class ExternalLoginHandler(BaseHandler):
                 raise web.HTTPError(400, log_message= "Attempted external login without required argument: %r" % arg)
 
         return_url = url_path_join(self.request.protocol + "://" + self.request.host,
-                                    self.base_url, "/hub/external_login")
+                                    self.base_url, "/hub/external-login")
         
         return_url = url_concat(return_url, {'next': self.get_argument('next', default = ''),
                                              'unique-id': self.get_argument('unique-id')})
@@ -70,7 +70,7 @@ class ExternalAuthenticator(Authenticator):
         super().__init__(**kwargs)
 
     def login_url(self, base_url):
-        return url_concat(url_path_join(base_url, 'external_login'),
+        return url_concat(url_path_join(base_url, 'external-login'),
             {'redirect-to': self.external_login_url, 
              'unique-id': self.unique_id})
 
@@ -140,5 +140,5 @@ class ExternalAuthenticator(Authenticator):
 
     def get_handlers(self, app):
         return [
-            (r'/external_login', self.external_login_handler),
+            (r'/external-login', self.external_login_handler),
         ]
