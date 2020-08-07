@@ -2,7 +2,7 @@ from jupyterhub.handlers import BaseHandler
 from jupyterhub.auth import Authenticator
 from jupyterhub.utils import url_path_join
 
-from traitlets import Dict, Unicode, Bool, Int
+from traitlets import Dict, Unicode, Bool, Int, default
 
 import time
 
@@ -25,17 +25,18 @@ class ExternalLoginHandler(BaseHandler):
                 self.redirect(self.get_next_url(user))
 
     def redirect_to_login_server(self):
-        required_args = ['redirect-to', 'unique-id']
+        required_args = ['redirect-to']
         for arg in required_args:
             if not self.get_argument(arg, ''):
                 self.log.warning("Attempted external login without required argument: %r" % arg)
                 raise web.HTTPError(400, log_message= "Attempted external login without required argument: %r" % arg)
 
-        return_url = url_path_join(self.request.protocol + "://" + self.request.host,
+        base_return_url = url_path_join(self.request.protocol + "://" + self.request.host,
                                     self.base_url, "/hub/external-login")
+        signed_base_return_url = self.create_signed_value(name='signed-return-url', value=base_return_url.encode('utf-8'))
         
-        return_url = url_concat(return_url, {'next': self.get_argument('next', default = ''),
-                                             'unique-id': self.get_argument('unique-id')})
+        return_url = url_concat(base_return_url, {'next': self.get_argument('next', default = ''),
+                                                  'signed-return-url': signed_base_return_url})
         self.redirect(url_concat(self.get_argument('redirect-to'), 
             {'return-url': return_url}))
 
@@ -52,12 +53,6 @@ class ExternalAuthenticator(Authenticator):
         config=True
     )
 
-    unique_id = Unicode(
-        help="""
-        A unique string for this instance to ensure that the same token can't be used on another instance.
-        """,
-        allow_none=False).tag(config=True)
-
     auth_token_valid_time = Int(300,
         help="""
         Time in seconds that the auth token will be valid.
@@ -71,8 +66,7 @@ class ExternalAuthenticator(Authenticator):
 
     def login_url(self, base_url):
         return url_concat(url_path_join(base_url, 'external-login'),
-            {'redirect-to': self.external_login_url, 
-             'unique-id': self.unique_id})
+            {'redirect-to': self.external_login_url})
 
     async def authenticate(self, handler, data):
         auth_token = handler.get_argument(auth_token_name)
@@ -86,12 +80,15 @@ class ExternalAuthenticator(Authenticator):
         self.log.debug("The authentication tokens value is: %r" % str(decrypted_auth_token))
 
         username = decrypted_auth_token['username']
-        reported_id = decrypted_auth_token['unique_id']
+        reported_return_url = decrypted_auth_token['return_url']
 
-        self.log.info("User %r is logging in with reported ID of %r." % (username, reported_id))
+        true_return_url = url_path_join(handler.request.protocol + "://" + handler.request.host,
+                                    handler.base_url, "/hub/external-login")
 
-        if not reported_id == self.unique_id:
-            self.log.warning("Invalid login. Reported ID %r does not match unique ID %r." % (reported_id, self.unique_id))
+        self.log.info("User %r is logging in with reported return url of %r." % (username, reported_return_url))
+
+        if not reported_return_url == true_return_url:
+            self.log.warning("Invalid login. Reported url %r does not match unique ID %r." % (reported_return_url, true_return_url))
             return None
 
 
