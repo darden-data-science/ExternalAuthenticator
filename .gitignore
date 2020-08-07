@@ -1,2 +1,6 @@
 .DS_Store
 /.vscode
+*.egg-info
+jupyterhub.sqlite
+jupyterhub_config.py
+__pycache__
