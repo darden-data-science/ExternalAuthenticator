@@ -22,6 +22,8 @@ class ExternalLoginHandler(BaseHandler):
         else:
             self.log.debug("Cookie present! Checking if user can log in.")
             user = await self.login_user()
+            self.log.debug("Path to clear cookis is %r and domain is %r" % (self.request.uri, self.request.host))
+            self.clear_cookie(name=auth_token_name, path=self.request.uri, domain=self.request.host)
             if user is None:
                 raise web.HTTPError(403, log_message="Invalid login attempt.")
             else:
