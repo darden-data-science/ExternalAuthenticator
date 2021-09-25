@@ -78,7 +78,7 @@ class ExternalAuthenticator(Authenticator):
         # We clear the cookie after it's been consumed but before it's been recorded as a login attempt
         # in order to ensure that no one gets stuck with a cookie in their browser that is not valid
         # and doesn't know how to clear it.
-        self.log.debug("Path to clear cookis is %r and domain is %r" % (handler.request.path, handler.request.host))
+        self.log.debug("Path to clear cookie is %r and domain is %r" % (handler.request.path, handler.request.host))
         handler.clear_cookie(name=auth_token_name, path=handler.request.path, domain=handler.request.host)
 
         if not decrypted_auth_token:
