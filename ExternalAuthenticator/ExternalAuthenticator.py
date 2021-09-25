@@ -72,7 +72,7 @@ class ExternalAuthenticator(Authenticator):
             {'redirect-to': self.external_login_url})
 
     async def authenticate(self, handler, data):
-        auth_token = self.get_cookie(auth_token_name)
+        auth_token = handler.get_cookie(auth_token_name)
         # handler.get_argument(auth_token_name)
         decrypted_auth_token = handler.get_secure_cookie(auth_token_name, max_age_days=self.auth_token_valid_time/86400)
 
