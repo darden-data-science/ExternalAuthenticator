@@ -15,9 +15,12 @@ auth_token_name = 'auth-token'
 
 class ExternalLoginHandler(BaseHandler):
     async def get(self):
-        if auth_token_name not in self.request.arguments:
+        # if auth_token_name not in self.request.arguments:
+        if not self.get_secure_cookie(auth_token_name, max_age_days=300/86400):
+            self.log.debug("No cookie present, redirecting to login server.")
             self.redirect_to_login_server()
         else:
+            self.log.debug("Cookie present! Checking if user can log in.")
             user = await self.login_user()
             if user is None:
                 raise web.HTTPError(403, log_message="Invalid login attempt.")
@@ -69,8 +72,9 @@ class ExternalAuthenticator(Authenticator):
             {'redirect-to': self.external_login_url})
 
     async def authenticate(self, handler, data):
-        auth_token = handler.get_argument(auth_token_name)
-        decrypted_auth_token = handler.get_secure_cookie(auth_token_name, value=auth_token, max_age_days=self.auth_token_valid_time/86400)
+        # auth_token = self.get_secure_cookie(auth_token_name)
+        # handler.get_argument(auth_token_name)
+        decrypted_auth_token = handler.get_secure_cookie(auth_token_name, max_age_days=self.auth_token_valid_time/86400)
 
         if not decrypted_auth_token:
             self.log.warning("Invalid auth_token.")
