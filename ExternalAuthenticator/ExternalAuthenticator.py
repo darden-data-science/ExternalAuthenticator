@@ -16,14 +16,12 @@ auth_token_name = 'auth-token'
 class ExternalLoginHandler(BaseHandler):
     async def get(self):
         # if auth_token_name not in self.request.arguments:
-        if not self.get_secure_cookie(auth_token_name, max_age_days=300/86400):
+        if not self.get_secure_cookie(auth_token_name, max_age_days=self.authenticator.auth_token_valid_time/86400):
             self.log.debug("No cookie present, redirecting to login server.")
             self.redirect_to_login_server()
         else:
             self.log.debug("Cookie present! Checking if user can log in.")
             user = await self.login_user()
-            self.log.debug("Path to clear cookis is %r and domain is %r" % (self.request.path, self.request.host))
-            self.clear_cookie(name=auth_token_name, path=self.request.path, domain=self.request.host)
             if user is None:
                 raise web.HTTPError(403, log_message="Invalid login attempt.")
             else:
@@ -77,6 +75,11 @@ class ExternalAuthenticator(Authenticator):
         auth_token = handler.get_cookie(auth_token_name)
         # handler.get_argument(auth_token_name)
         decrypted_auth_token = handler.get_secure_cookie(auth_token_name, max_age_days=self.auth_token_valid_time/86400)
+        # We clear the cookie after it's been consumed but before it's been recorded as a login attempt
+        # in order to ensure that no one gets stuck with a cookie in their browser that is not valid
+        # and doesn't know how to clear it.
+        self.log.debug("Path to clear cookis is %r and domain is %r" % (handler.request.path, handler.request.host))
+        handler.clear_cookie(name=auth_token_name, path=handler.request.path, domain=handler.request.host)
 
         if not decrypted_auth_token:
             self.log.warning("Invalid auth_token.")
