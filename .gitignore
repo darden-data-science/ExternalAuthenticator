@@ -4,3 +4,8 @@
 jupyterhub.sqlite
 jupyterhub_config.py
 __pycache__
+.coverage
+.venv/
+build/
+dist/
+*.pyc

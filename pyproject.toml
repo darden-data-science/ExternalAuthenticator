@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ExternalAuthenticator"
+dynamic = ["version"]
+description = "Authenticate JupyterHub users with an external login service that shares the hub cookie secret."
+readme = "README.md"
+requires-python = ">=3.8"
+license = "BSD-3-Clause"
+authors = [
+  { name = "Michael Albert", email = "albertmichaelj@gmail.com" },
+]
+keywords = [
+  "authentication",
+  "jupyterhub",
+  "single-sign-on",
+  "sso",
+]
+classifiers = [
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: System Administrators",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+]
+dependencies = [
+  "jupyterhub>=4",
+]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2",
+]
+
+[project.urls]
+Homepage = "https://github.com/darden-data-science/ExternalAuthenticator"
+Issues = "https://github.com/darden-data-science/ExternalAuthenticator/issues"
+Source = "https://github.com/darden-data-science/ExternalAuthenticator"
+
+[project.entry-points."jupyterhub.authenticators"]
+external_authenticator = "ExternalAuthenticator:ExternalAuthenticator"
+
+[tool.setuptools]
+packages = ["ExternalAuthenticator"]
+
+[tool.setuptools.dynamic]
+version = { attr = "ExternalAuthenticator._version.__version__" }
