@@ -90,7 +90,7 @@ class HandlerStub:
 
         return self.cookies.get(name)
 
-    def get_secure_cookie(self, name, max_age_days=None, value=None):
+    def get_signed_cookie(self, name, max_age_days=None, value=None):
         """Mimic Tornado secure-cookie validation.
 
         When `value` is provided, the authenticator is asking Tornado to verify
@@ -105,6 +105,41 @@ class HandlerStub:
     def clear_cookie(self, name, path=None, domain=None):
         """Record cookie clearing so tests can assert the defensive cleanup."""
 
+        self.cleared.append((name, path, domain))
+
+
+class LegacyHandlerStub:
+    """Simulate older Tornado releases that only expose `get_secure_cookie`.
+
+    The production code prefers `get_signed_cookie` to avoid deprecation
+    warnings on newer Tornado releases, but still falls back to the legacy name
+    for compatibility with older deployments.
+    """
+
+    def __init__(self, *, cookie=None, secure_cookie=None, valid_tokens=None):
+        self.base_url = "/jupyter"
+        self.request = RequestStub()
+        self.cookies = {}
+        self.secure_values = {}
+        self.valid_tokens = set(valid_tokens or [])
+        self.cleared = []
+
+        if cookie is not None:
+            self.cookies["auth-token"] = cookie
+            self.valid_tokens.add(cookie)
+
+        if secure_cookie is not None:
+            self.secure_values["auth-token"] = secure_cookie
+
+    def get_cookie(self, name):
+        return self.cookies.get(name)
+
+    def get_secure_cookie(self, name, max_age_days=None, value=None):
+        if value is not None:
+            return value if value in self.valid_tokens else None
+        return self.secure_values.get(name)
+
+    def clear_cookie(self, name, path=None, domain=None):
         self.cleared.append((name, path, domain))
 
 
@@ -263,6 +298,32 @@ class ExternalAuthenticatorTests(unittest.IsolatedAsyncioTestCase):
             parse_qs(parsed.query),
             {"redirect-to": ["https://login.example.com/sso"]},
         )
+
+    def test_cookie_helper_prefers_new_tornado_name(self):
+        """Prefer `get_signed_cookie` when the handler exposes the new API."""
+
+        handler = HandlerStub(secure_cookie=b"payload")
+
+        cookie = self.module.get_signed_cookie(
+            handler,
+            "auth-token",
+            max_age_days=1,
+        )
+
+        self.assertEqual(cookie, b"payload")
+
+    def test_cookie_helper_falls_back_to_legacy_name(self):
+        """Fall back to `get_secure_cookie` for older Tornado releases."""
+
+        handler = LegacyHandlerStub(secure_cookie=b"payload")
+
+        cookie = self.module.get_signed_cookie(
+            handler,
+            "auth-token",
+            max_age_days=1,
+        )
+
+        self.assertEqual(cookie, b"payload")
 
     async def test_authenticate_records_token_history(self):
         """A successful login records the token and clears the browser cookie.

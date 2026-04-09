@@ -12,9 +12,25 @@ from traitlets import Int, Unicode
 auth_token_name = 'auth-token'
 
 
+def get_signed_cookie(handler, *args, **kwargs):
+    """Read a signed cookie while tolerating Tornado's old method name.
+
+    Tornado 6.3 renamed ``get_secure_cookie`` to ``get_signed_cookie`` and kept
+    the former as a deprecated alias. Prefer the new name when available while
+    retaining compatibility with older Tornado releases that only expose the
+    original method.
+    """
+
+    cookie_getter = getattr(handler, "get_signed_cookie", None)
+    if cookie_getter is None:
+        cookie_getter = handler.get_secure_cookie
+    return cookie_getter(*args, **kwargs)
+
+
 class ExternalLoginHandler(BaseHandler):
     async def get(self):
-        if not self.get_secure_cookie(
+        if not get_signed_cookie(
+            self,
             auth_token_name,
             max_age_days=self.authenticator.auth_token_valid_time / 86400,
         ):
@@ -89,7 +105,8 @@ class ExternalAuthenticator(Authenticator):
 
     async def authenticate(self, handler, data=None):
         auth_token = handler.get_cookie(auth_token_name)
-        decrypted_auth_token = handler.get_secure_cookie(
+        decrypted_auth_token = get_signed_cookie(
+            handler,
             auth_token_name,
             max_age_days=self.auth_token_valid_time / 86400,
         )
@@ -157,7 +174,8 @@ class ExternalAuthenticator(Authenticator):
     def remove_expired_tokens(self, token_history, handler):
         keys = list(token_history.keys())
         for x in keys:
-            if not handler.get_secure_cookie(
+            if not get_signed_cookie(
+                handler,
                 auth_token_name,
                 value=x,
                 max_age_days=self.auth_token_valid_time / 86400,
