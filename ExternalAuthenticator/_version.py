@@ -4,10 +4,9 @@
 # Distributed under the terms of the Modified BSD License.
 
 version_info = (
-    0,
-    0,
     1,
-    'dev',  # comment-out this line for a release
+    0,
+    0,
 )
 __version__ = '.'.join(map(str, version_info[:3]))
 
