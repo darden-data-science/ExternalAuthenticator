@@ -28,7 +28,7 @@ classifiers = [
   "Programming Language :: Python :: 3 :: Only",
 ]
 dependencies = [
-  "jupyterhub>=4,<6",
+  "jupyterhub>=4",
 ]
 
 [project.optional-dependencies]
