@@ -1,22 +1,23 @@
-from jupyterhub.handlers import BaseHandler
-from jupyterhub.auth import Authenticator
-from jupyterhub.utils import url_path_join
-
-from traitlets import Dict, Unicode, Bool, Int, default
-
-import time
+"""JupyterHub authenticator backed by an external shared-secret login flow."""
 
 import json
 
-from tornado.httputil import url_concat
+from jupyterhub.auth import Authenticator
+from jupyterhub.handlers import BaseHandler
+from jupyterhub.utils import url_path_join
 from tornado import web
+from tornado.httputil import url_concat
+from traitlets import Int, Unicode
 
 auth_token_name = 'auth-token'
 
+
 class ExternalLoginHandler(BaseHandler):
     async def get(self):
-        # if auth_token_name not in self.request.arguments:
-        if not self.get_secure_cookie(auth_token_name, max_age_days=self.authenticator.auth_token_valid_time/86400):
+        if not self.get_secure_cookie(
+            auth_token_name,
+            max_age_days=self.authenticator.auth_token_valid_time / 86400,
+        ):
             self.log.debug("No cookie present, redirecting to login server.")
             self.redirect_to_login_server()
         else:
@@ -32,26 +33,44 @@ class ExternalLoginHandler(BaseHandler):
         for arg in required_args:
             if not self.get_argument(arg, ''):
                 self.log.warning("Attempted external login without required argument: %r" % arg)
-                raise web.HTTPError(400, log_message= "Attempted external login without required argument: %r" % arg)
+                raise web.HTTPError(
+                    400,
+                    log_message="Attempted external login without required argument: %r" % arg,
+                )
 
-        base_return_url = url_path_join(self.request.protocol + "://" + self.request.host,
-                                    self.base_url, "/hub/external-login")
-        signed_base_return_url = self.create_signed_value(name='signed-return-url', value=base_return_url.encode('utf-8'))
-        
-        return_url = url_concat(base_return_url, {'next': self.get_argument('next', default = ''),
-                                                  'signed-return-url': signed_base_return_url})
-        self.redirect(url_concat(self.get_argument('redirect-to'), 
-            {'return-url': return_url}))
+        base_return_url = url_path_join(
+            self.request.protocol + "://" + self.request.host,
+            self.base_url,
+            "/hub/external-login",
+        )
+        signed_base_return_url = self.create_signed_value(
+            name='signed-return-url',
+            value=base_return_url.encode('utf-8'),
+        )
+
+        return_url = url_concat(
+            base_return_url,
+            {
+                'next': self.get_argument('next', default=''),
+                'signed-return-url': signed_base_return_url,
+            },
+        )
+        self.redirect(
+            url_concat(
+                self.get_argument('redirect-to'),
+                {'return-url': return_url},
+            )
+        )
 
 
 class ExternalAuthenticator(Authenticator):
-    """External Authenticator"""
+    """Authenticate JupyterHub users via a separate trusted login service."""
 
     external_login_handler = ExternalLoginHandler
 
     login_service = Unicode(u"External Authenticator",
         help="""
-        The name of the SAML based authentication service.
+        The name displayed for the external authentication service.
         """,
         config=True
     )
@@ -60,24 +79,22 @@ class ExternalAuthenticator(Authenticator):
         help="""
         Time in seconds that the auth token will be valid.
         """
-    )
+    ).tag(config=True)
 
     external_login_url = Unicode(help="The url of the external login service").tag(config=True)
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
 
     def login_url(self, base_url):
         return url_concat(url_path_join(base_url, 'external-login'),
             {'redirect-to': self.external_login_url})
 
-    async def authenticate(self, handler, data):
+    async def authenticate(self, handler, data=None):
         auth_token = handler.get_cookie(auth_token_name)
-        # handler.get_argument(auth_token_name)
-        decrypted_auth_token = handler.get_secure_cookie(auth_token_name, max_age_days=self.auth_token_valid_time/86400)
-        # We clear the cookie after it's been consumed but before it's been recorded as a login attempt
-        # in order to ensure that no one gets stuck with a cookie in their browser that is not valid
-        # and doesn't know how to clear it.
+        decrypted_auth_token = handler.get_secure_cookie(
+            auth_token_name,
+            max_age_days=self.auth_token_valid_time / 86400,
+        )
+        # Clear the browser cookie before validating the token so an expired or
+        # invalid token does not trap users in a broken login loop.
         self.log.debug("Path to clear cookie is %r and domain is %r" % (handler.request.path, handler.request.host))
         handler.clear_cookie(auth_token_name, path=handler.request.path, domain=handler.request.host)
 
@@ -91,15 +108,17 @@ class ExternalAuthenticator(Authenticator):
         username = decrypted_auth_token['username']
         reported_return_url = decrypted_auth_token['return_url']
 
-        true_return_url = url_path_join(handler.request.protocol + "://" + handler.request.host,
-                                    handler.base_url, "/hub/external-login")
+        true_return_url = url_path_join(
+            handler.request.protocol + "://" + handler.request.host,
+            handler.base_url,
+            "/hub/external-login",
+        )
 
         self.log.info("User %r is logging in with reported return url of %r." % (username, reported_return_url))
 
         if not reported_return_url == true_return_url:
             self.log.warning("Invalid login. Reported url %r does not match unique ID %r." % (reported_return_url, true_return_url))
             return None
-
 
         app = self.parent
         username = self.normalize_username(username)
@@ -135,11 +154,14 @@ class ExternalAuthenticator(Authenticator):
 
         return userdict
 
-
     def remove_expired_tokens(self, token_history, handler):
         keys = list(token_history.keys())
         for x in keys:
-            if not handler.get_secure_cookie(auth_token_name, value=x, max_age_days=self.auth_token_valid_time/86400):
+            if not handler.get_secure_cookie(
+                auth_token_name,
+                value=x,
+                max_age_days=self.auth_token_valid_time / 86400,
+            ):
                 token_history.pop(x)
                 self.log.debug("Deleting expired token: %r" % x)
         return token_history
