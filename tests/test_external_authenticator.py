@@ -32,13 +32,19 @@ class DummyLog:
     without pulling in Python's logging configuration machinery.
     """
 
-    def debug(self, message):
+    # Accepts *args/**kwargs so it tolerates BOTH logging styles: eager
+    # ("...%r" % x) as used through most of this package, and lazy
+    # ("...%r", x) which is the correct form because it skips formatting
+    # entirely when the level is disabled. A single-argument stub silently
+    # forces every call site to the eager style.
+
+    def debug(self, message, *args, **kwargs):
         self.last_message = message
 
-    def info(self, message):
+    def info(self, message, *args, **kwargs):
         self.last_message = message
 
-    def warning(self, message):
+    def warning(self, message, *args, **kwargs):
         self.last_message = message
 
 
@@ -53,11 +59,19 @@ class DummyUser:
 
 
 class RequestStub:
-    """Small request object with just the attributes the authenticator reads."""
+    """Small request object with just the attributes the authenticator reads.
 
-    def __init__(self):
+    `host` and `host_name` are separate on purpose. Tornado's `host` includes
+    the port when it is non-default; `host_name` never does. This stub used to
+    model only `host`, with a value that had no port — which is exactly why it
+    could not catch the cookie-clearing bug fixed in 1.0.1. Any new attribute
+    added here should model the awkward case, not the convenient one.
+    """
+
+    def __init__(self, host="hub.example.com", port=None):
         self.protocol = "https"
-        self.host = "hub.example.com"
+        self.host_name = host
+        self.host = f"{host}:{port}" if port else host
         self.path = "/hub/login"
 
 
@@ -70,9 +84,10 @@ class HandlerStub:
     interactions so tests can verify the expected side effects.
     """
 
-    def __init__(self, *, cookie=None, secure_cookie=None, valid_tokens=None):
+    def __init__(self, *, cookie=None, secure_cookie=None, valid_tokens=None,
+                 request=None):
         self.base_url = "/jupyter"
-        self.request = RequestStub()
+        self.request = request or RequestStub()
         self.cookies = {}
         self.secure_values = {}
         self.valid_tokens = set(valid_tokens or [])
@@ -116,9 +131,10 @@ class LegacyHandlerStub:
     for compatibility with older deployments.
     """
 
-    def __init__(self, *, cookie=None, secure_cookie=None, valid_tokens=None):
+    def __init__(self, *, cookie=None, secure_cookie=None, valid_tokens=None,
+                 request=None):
         self.base_url = "/jupyter"
-        self.request = RequestStub()
+        self.request = request or RequestStub()
         self.cookies = {}
         self.secure_values = {}
         self.valid_tokens = set(valid_tokens or [])
@@ -411,6 +427,40 @@ class ExternalAuthenticatorTests(unittest.IsolatedAsyncioTestCase):
         authentication = await authenticator.authenticate(handler, data=None)
 
         self.assertIsNone(authentication)
+
+    async def test_cookie_is_cleared_with_a_port_free_domain(self):
+        """Regression test for the 1.0.1 cookie-clearing fix.
+
+        A cookie `Domain` attribute must not contain a port (RFC 6265). When it
+        does, the whole Set-Cookie is discarded and the clear silently does
+        nothing, leaving a stale auth-token that replay protection then rejects
+        — trapping the user in exactly the loop this clear exists to prevent.
+
+        The bug was invisible for years because production runs on port 443,
+        where Tornado's `host` and `host_name` are identical. It only appears on
+        a non-default port, which is what this test forces.
+        """
+
+        handler = HandlerStub(
+            cookie="raw-token",
+            secure_cookie=json.dumps(
+                {
+                    "username": "alice",
+                    "return_url": "https://hub.example.com:8081/jupyter/hub/external-login",
+                }
+            ).encode("utf-8"),
+            request=RequestStub(host="hub.example.com", port=8081),
+        )
+        handler.parent = None
+        authenticator = self.module.ExternalAuthenticator(log=DummyLog())
+        authenticator.parent = types.SimpleNamespace(users={})
+
+        await authenticator.authenticate(handler)
+
+        self.assertEqual(len(handler.cleared), 1)
+        _name, _path, domain = handler.cleared[0]
+        self.assertEqual(domain, "hub.example.com")
+        self.assertNotIn(":", domain, "a port in a cookie Domain voids the clear")
 
     def test_remove_expired_tokens_prunes_invalid_entries(self):
         """Only still-valid tokens should remain in replay-protection history."""

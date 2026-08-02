@@ -3,8 +3,10 @@ name: CI
 on:
   pull_request:
   push:
+    # main is this repo's default branch. It previously said 'master', so CI
+    # never ran on default-branch pushes at all.
     branches:
-      - master
+      - main
       - "codex/**"
 
 jobs:
@@ -17,10 +19,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 

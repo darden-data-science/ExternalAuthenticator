@@ -18,7 +18,7 @@ This repository is a good fit when:
 
 ## Requirements
 
-- Python 3.8 or newer
+- Python 3.10 or newer
 - JupyterHub 4.x or 5.x
 - A trusted external login service that can use the same Tornado `cookie_secret` as the hub
 - HTTPS everywhere, especially if the external service and JupyterHub live on different hosts

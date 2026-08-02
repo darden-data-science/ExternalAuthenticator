@@ -2,8 +2,8 @@
 
 # ExternalAuthenticator
 
-**LIVE. v1.0.0, modernized 2026-04-09. This repo is the packaging reference for the other four
-Python repos in this system** — PEP 621 `pyproject.toml` with a dynamic version, a 7-line
+**LIVE. v1.0.1. This repo is the packaging reference for the other Python repos in this system** —
+PEP 621 `pyproject.toml` with a dynamic version, a 7-line
 `setup.py` shim, GitHub Actions CI, and a `sys.modules`-stubbed unittest suite.
 
 Note the default branch here is **`main`**. Every sibling repo uses `master`.
@@ -41,7 +41,7 @@ ExternalAuthenticator/ExternalAuthenticator.py   191 lines — everything
 ExternalAuthenticator/_version.py                the single source of truth for the version
 pyproject.toml                                   PEP 621, authoritative
 setup.py                                         7-line shim, kept for editable installs
-tests/test_external_authenticator.py             8 tests
+tests/test_external_authenticator.py             9 tests
 examples/jupyterhub_config.example.py            the current, correct config example
 .github/workflows/ci.yml                         py3.10-3.13
 ```
@@ -64,7 +64,7 @@ python -m unittest discover -s tests -v
 python -m build
 ```
 
-## Testing convention — this is the pattern to copy
+## Testing convention — and where it fell short
 
 `tests/test_external_authenticator.py:146` (`load_package()`) injects fake `traitlets`,
 `jupyterhub`, `jupyterhub.auth`, `jupyterhub.handlers`, `jupyterhub.utils`, `tornado`,
@@ -74,25 +74,45 @@ run with **no real JupyterHub installed** — fast, no dependency hell, works on
 Two caveats if you extend it: there is no `tests/__init__.py`, and the `sys.modules` stubbing
 would leak across a shared pytest session, so this suite wants to stay on stdlib `unittest`.
 
-Not covered: `ExternalLoginHandler` (neither `get` nor `redirect_to_login_server`), and nothing
-runs against real JupyterHub base classes.
+**A stub only tests what it models.** The v1.0.1 cookie bug survived for years because
+`RequestStub` set `request.host` to a value with no port — the convenient case. It now takes an
+explicit `port`, and the rule is: model the awkward case. For anything touching the real wire
+contract, use the end-to-end rig in `../Single Auth Server/dev/` instead; flip the commented
+`[tool.uv.sources]` entry in its `pyproject.toml` to point at this checkout.
+
+`../NullAuthenticator` and `../DictionaryAuthenticator` deliberately went the other way and test
+against a real JupyterHub, because their behaviour lives in traitlets and JupyterHub's allow gate
+rather than in their own code. Copy the stubbing pattern only when a package's logic is genuinely
+independent of its dependencies.
+
+Still not covered: `ExternalLoginHandler` (neither `get` nor `redirect_to_login_server`).
+
+## Fixed in v1.0.1 (2026-08-02)
+
+- **The cookie clear was a no-op on any non-default port.** `authenticate()` cleared `auth-token`
+  with `domain=handler.request.host`, which carries the port. A port in a cookie `Domain` is
+  invalid per RFC 6265, so the whole `Set-Cookie` was discarded and the cookie survived — after
+  which replay protection rejects it, trapping the user in exactly the loop the clear exists to
+  prevent. Now uses `request.host_name`. Production never saw it because port 443 is implicit and
+  the two values are identical there; four commits between 2021 and 2024 circled this line without
+  finding it. Caught by the end-to-end rig, not by this repo's tests — see below.
+- `setuptools>=69` → `>=77`. The bare SPDX `license` string is rejected by 69–76 with an opaque
+  "invalid project.license" error, so the build was broken on those versions.
+- **CI never ran on the default branch.** The push trigger listed `master`; the default branch is
+  `main`.
+- `requires-python` `>=3.8` → `>=3.10`, matching the CI matrix and the sibling repos. Version
+  classifiers and `Framework :: Jupyter` added.
 
 ## Known issues
 
-- **`pyproject.toml:2` declares `requires = ["setuptools>=69"]`, but `license = "BSD-3-Clause"`
-  as a bare SPDX string needs setuptools ≥77.** On 69–76 the build fails with an invalid
-  `project.license` error. Should be `setuptools>=77`.
-- **CI never runs on the default branch.** `.github/workflows/ci.yml` lists `master` and
-  `codex/**` in its push trigger, but the default branch is `main`.
-- `requires-python = ">=3.8"` while CI only tests 3.10–3.13, and no `Programming Language ::
-  Python :: 3.x` classifiers are declared.
-- `ExternalAuthenticator.py:116` — `clear_cookie(..., path=handler.request.path,
-  domain=handler.request.host)`. `request.host` includes the port on non-default ports, which is
-  not a valid cookie `Domain`, so the clear can silently no-op; and `path` is the request path,
-  not the cookie's original `Path`. Four separate commits (2021–2024) have taken runs at this
-  line; it is still suspect.
 - `login_url()` is overridden without `auto_login = True`, so users see an intermediate
-  "Sign in with…" page. Intentional? Worth deciding.
+  "Sign in with…" page rather than being bounced straight to the IdP. Probably intentional; worth
+  deciding explicitly.
+- The cookie clear matches the login service's **default** `Domain` (the return URL's hostname).
+  If SingleAuthServer's `auth_token_cookie_domain` is ever configured to something else, the clear
+  will not match and a stale cookie can linger for `auth_token_valid_time`.
+- `ExternalLoginHandler` is still untested — neither `get` nor `redirect_to_login_server`. The
+  end-to-end rig exercises both; the unit suite does not.
 
 ## Cross-repo impact
 

@@ -112,8 +112,29 @@ class ExternalAuthenticator(Authenticator):
         )
         # Clear the browser cookie before validating the token so an expired or
         # invalid token does not trap users in a broken login loop.
-        self.log.debug("Path to clear cookie is %r and domain is %r" % (handler.request.path, handler.request.host))
-        handler.clear_cookie(auth_token_name, path=handler.request.path, domain=handler.request.host)
+        #
+        # host_name, NOT host: `host` carries the port on non-default ports
+        # ("hub.example.com:8081"), and a port in a cookie Domain attribute is
+        # invalid per RFC 6265, so the entire Set-Cookie is discarded and the
+        # clear silently does nothing. Production hides this because port 443 is
+        # implicit and the two are identical there.
+        #
+        # host_name matches what the login service used: it sets the cookie with
+        # Domain=<hostname of the return URL>, and authenticate() has already
+        # required that return URL to equal one built from this request. The two
+        # therefore agree by construction — unless the login service overrides
+        # its auth_token_cookie_domain, in which case this clear will not match
+        # and a stale cookie can linger for auth_token_valid_time.
+        cookie_domain = handler.request.host_name
+        self.log.debug(
+            "Clearing %r with path=%r domain=%r",
+            auth_token_name,
+            handler.request.path,
+            cookie_domain,
+        )
+        handler.clear_cookie(
+            auth_token_name, path=handler.request.path, domain=cookie_domain
+        )
 
         if not decrypted_auth_token:
             self.log.warning("Invalid auth_token.")
