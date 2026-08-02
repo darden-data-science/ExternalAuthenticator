@@ -28,11 +28,11 @@ separately blocked by `token_history` in JupyterHub `auth_state`.
 obligation.
 
 **Who consumes me:** pip-installed from **this GitHub default branch, unpinned**, by
-`images/hub/Dockerfile:8` in `darden-data-science/jupyterhub-config`. Configured by
+`images/hub/Dockerfile:8` in `darden-data-science/jupyterhub-config-darden`. Configured by
 `config_files/integration/jupyterhub/values.yaml.gotmpl:42-55`.
 
 **Full system map:** `/Users/Michael/Documents/Git Projects/Darden Jupyterhub/docs/SYSTEM-MAP.md`
-(repo `darden-data-science/jupyterhub-config`, private).
+(repo `darden-data-science/jupyterhub-config-darden`, private).
 
 ## Layout
 
